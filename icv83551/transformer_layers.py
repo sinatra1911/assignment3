@@ -352,6 +352,20 @@ class PatchEmbedding(nn.Module):
         # using the projection layer.                                              #
         ############################################################################
 
+        # for one axis H or W
+        G = int(self.num_patches ** 0.5)
+
+        # making patches
+        out = x.view(N, C, G, self.patch_size, G, self.patch_size)
+
+        # reorder
+        out = out.permute(0, 2, 4, 1, 3, 5)
+
+        # flatten
+        out = out.reshape(N, self.num_patches, self.patch_dim)
+
+        out = self.proj(out)
+
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -399,6 +413,18 @@ class TransformerEncoderLayer(nn.Module):
         # TODO: Implement the encoder layer by applying self-attention followed    #
         # by a feedforward block. This code will be very similar to decoder layer. #
         ############################################################################
+
+        shortcut = src
+        src = self.self_attn(query=src, key=src, value=src, attn_mask=src_mask)
+        src = self.dropout_self(src)
+        src = shortcut + src
+        src = self.norm_self(src)
+
+        shortcut = src
+        src = self.ffn(src)
+        src = self.dropout_ffn(src)
+        src = src + shortcut
+        src = self.norm_ffn(src)
 
         ############################################################################
         #                             END OF YOUR CODE                             #

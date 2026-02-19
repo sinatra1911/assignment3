@@ -257,6 +257,12 @@ class VisionTransformer(nn.Module):
         # 5. Feed it through a linear layer to produce class logits.              #
         ############################################################################
 
+        logits = self.patch_embed(x)
+        logits = self.positional_encoding(logits)
+        logits = self.transformer(logits)
+        logits = torch.mean(logits, dim=1)
+        logits = self.head(logits)
+
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
