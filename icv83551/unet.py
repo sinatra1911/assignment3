@@ -1,5 +1,6 @@
 import copy
 from einops import rearrange
+from sympy import content
 from torch import einsum
 
 from torch import nn
@@ -181,6 +182,12 @@ class Unet(nn.Module):
             # load a pretrained checkpoint.
             ##################################################################
 
+            down_block = nn.ModuleList([
+                ResnetBlock(dim_in, dim_in, context_dim=context_dim),
+                ResnetBlock(dim_in, dim_in, context_dim=context_dim),
+                Downsample(dim_in, dim_out)
+            ])
+
             ##################################################################
             self.downs.append(down_block)
 
@@ -205,6 +212,12 @@ class Unet(nn.Module):
             # channels at the input of both ResnetBlocks.
             ##################################################################
 
+            up_block = nn.ModuleList([
+                Upsample(dim_in, dim_out),
+                ResnetBlock(2 * dim_out, dim_out, context_dim=context_dim),
+                ResnetBlock(2 * dim_out, dim_out, context_dim=context_dim)
+            ])
+
             self.ups.append(up_block)
             ##################################################################
 
@@ -226,6 +239,10 @@ class Unet(nn.Module):
         # You will have to call self.forward two times.
         # For unconditional sampling, pass None in`text_emb`.
         ##################################################################
+
+        eps_x_t_cond = self.forward(x, time, model_kwargs)
+        eps_x_t_empty = self.forward(x, time, {**model_kwargs, "text_emb": None})
+        x = (cfg_scale + 1) * eps_x_t_cond - cfg_scale * eps_x_t_empty
 
         ##################################################################
 
@@ -281,6 +298,27 @@ class Unet(nn.Module):
         #      skip connection from the downsampling path.
         #    - Make sure to pass the context to each ResNet block.
         ##################################################################
+
+        # init
+        x_down_blocks =[]
+
+        for down in self.downs:
+            x_down_blocks.append([ x:= block(x, context) for block in down[:-1]])
+            x = down[-1](x)
+
+        # middle block
+        x = self.mid_block2(self.mid_block1(x, context), context)
+
+        for up_block, skip_connections in zip(self.ups, reversed(x_down_blocks)):
+
+            upsample_layer, *res_blocks = up_block
+
+            x = upsample_layer(x)
+
+            for res_block, skip_x in zip(res_blocks, reversed(skip_connections)):
+
+                x = res_block(torch.cat([x, skip_x], dim=1), context)
+
 
         ##################################################################
 
